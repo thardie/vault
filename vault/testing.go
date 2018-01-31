@@ -325,6 +325,8 @@ func testTokenStore(t testing.T, c *Core) *TokenStore {
 	tokenstore, _ := c.newCredentialBackend(context.Background(), "token", sysView, view, nil)
 	ts := tokenstore.(*TokenStore)
 
+	c.tokenStore = ts
+
 	err = c.router.Unmount(context.Background(), "auth/token/")
 	if err != nil {
 		t.Fatal(err)
@@ -343,9 +345,8 @@ func testTokenStore(t testing.T, c *Core) *TokenStore {
 // mounted, so that logical token functions can be used
 func TestCoreWithTokenStore(t testing.T) (*Core, *TokenStore, [][]byte, string) {
 	c, keys, root := TestCoreUnsealed(t)
-	ts := testTokenStore(t, c)
 
-	return c, ts, keys, root
+	return c, c.tokenStore, keys, root
 }
 
 // TestCoreWithBackendTokenStore returns a core that has a token store

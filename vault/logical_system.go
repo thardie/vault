@@ -1289,12 +1289,16 @@ func (b *SystemBackend) handleCapabilitiesAccessor(ctx context.Context, req *log
 		return logical.ErrorResponse("missing accessor"), nil
 	}
 
-	aEntry, err := b.Core.tokenStore.lookupByAccessor(ctx, accessor, false)
+	tokenID, err := b.Core.tokenStore.lookupByAccessor(ctx, accessor, false)
 	if err != nil {
 		return nil, err
 	}
 
-	capabilities, err := b.Core.Capabilities(ctx, aEntry.TokenID, d.Get("path").(string))
+	if tokenID == "" {
+		return logical.ErrorResponse("invalid accessor"), nil
+	}
+
+	capabilities, err := b.Core.Capabilities(ctx, tokenID, d.Get("path").(string))
 	if err != nil {
 		return nil, err
 	}
