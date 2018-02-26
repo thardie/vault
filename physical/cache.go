@@ -52,7 +52,7 @@ func NewCache(b Backend, size int, logger log.Logger) *Cache {
 	c := &Cache{
 		backend: b,
 		lru:     cache,
-		locks:   locksutil.CreateLocks(),
+		locks:   locksutil.CreateLocks(locksutil.DefaultLockCount),
 		logger:  logger,
 		// This fails safe.
 		enabled: new(uint32),

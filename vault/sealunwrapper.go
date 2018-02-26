@@ -21,7 +21,7 @@ func NewSealUnwrapper(underlying physical.Backend, logger log.Logger) physical.B
 	ret := &sealUnwrapper{
 		underlying:   underlying,
 		logger:       logger,
-		locks:        locksutil.CreateLocks(),
+		locks:        locksutil.CreateLocks(locksutil.DefaultLockCount),
 		allowUnwraps: new(uint32),
 	}
 

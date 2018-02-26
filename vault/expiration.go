@@ -92,7 +92,7 @@ func NewExpirationManager(c *Core, view *BarrierView) *ExpirationManager {
 		// new instances of the expiration manager will go immediately into
 		// restore mode
 		restoreMode:  1,
-		restoreLocks: locksutil.CreateLocks(),
+		restoreLocks: locksutil.CreateLocks(locksutil.DefaultLockCount),
 		quitCh:       make(chan struct{}),
 
 		coreStateLock:     &c.stateLock,

@@ -68,16 +68,16 @@ func Backend(conf *logical.BackendConfig) (*backend, error) {
 		view: conf.StorageView,
 
 		// Create locks to modify the registered roles
-		roleLocks: locksutil.CreateLocks(),
+		roleLocks: locksutil.CreateLocks(locksutil.DefaultLockCount),
 
 		// Create locks to modify the generated RoleIDs
-		roleIDLocks: locksutil.CreateLocks(),
+		roleIDLocks: locksutil.CreateLocks(locksutil.DefaultLockCount),
 
 		// Create locks to modify the generated SecretIDs
-		secretIDLocks: locksutil.CreateLocks(),
+		secretIDLocks: locksutil.CreateLocks(locksutil.DefaultLockCount),
 
 		// Create locks to modify the generated SecretIDAccessors
-		secretIDAccessorLocks: locksutil.CreateLocks(),
+		secretIDAccessorLocks: locksutil.CreateLocks(locksutil.DefaultLockCount),
 	}
 
 	// Attach the paths and secrets that are to be handled by the backend

@@ -116,7 +116,7 @@ func NewTokenStore(ctx context.Context, c *Core, config *logical.BackendConfig) 
 		view:               view,
 		cubbyholeDestroyer: destroyCubbyhole,
 		logger:             c.logger,
-		tokenLocks:         locksutil.CreateLocks(),
+		tokenLocks:         locksutil.CreateLocks(locksutil.DefaultLockCount),
 		saltLock:           sync.RWMutex{},
 	}
 
