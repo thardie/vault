@@ -557,7 +557,7 @@ func (c *Core) newCredentialBackend(
 
 	config := &logical.BackendConfig{
 		StorageView: view,
-		Logger:      c.logger,
+		Logger:      c.logger.LogxiLogger(),
 		Config:      conf,
 		System:      sysView,
 	}

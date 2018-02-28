@@ -314,7 +314,7 @@ func (c *Core) persistAudit(ctx context.Context, table *MountTable, localOnly bo
 // setupAudit is invoked after we've loaded the audit able to
 // initialize the audit backends
 func (c *Core) setupAudits(ctx context.Context) error {
-	broker := NewAuditBroker(c.logger)
+	broker := NewAuditBroker(c.logger.LogxiLogger())
 
 	c.auditLock.Lock()
 	defer c.auditLock.Unlock()

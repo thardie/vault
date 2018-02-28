@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +18,7 @@ const (
 
 // NewVaultLogger creates a new logger with the specified level and a Vault
 // formatter
+// Deprecated: use NewVaultHCLogger instead
 func NewVaultLogger(level int) log.Logger {
 	logger := log.New("vault")
 	return setLevelFormatter(logger, level, createVaultFormatter())
@@ -26,6 +26,7 @@ func NewVaultLogger(level int) log.Logger {
 
 // NewVaultLoggerWithWriter creates a new logger with the specified level and
 // writer and a Vault formatter
+// Deprecated: use NewVaultHCLogger instead
 func NewVaultLoggerWithWriter(w io.Writer, level int) log.Logger {
 	logger := log.NewLogger(w, "vault")
 	return setLevelFormatter(logger, level, createVaultFormatter())
@@ -43,10 +44,7 @@ func createVaultFormatter() log.Formatter {
 	ret := &vaultFormatter{
 		Mutex: &sync.Mutex{},
 	}
-	logFormat := os.Getenv("VAULT_LOG_FORMAT")
-	if logFormat == "" {
-		logFormat = os.Getenv("LOGXI_FORMAT")
-	}
+	logFormat := logFormat()
 	switch strings.ToLower(logFormat) {
 	case "json", "vault_json", "vault-json", "vaultjson":
 		ret.style = stylejson
@@ -79,7 +77,7 @@ func (v *vaultFormatter) formatDefault(writer io.Writer, currTime time.Time, lev
 	// Write a trailing newline
 	defer writer.Write([]byte("\n"))
 
-	writer.Write([]byte(currTime.Local().Format("2006/01/02 15:04:05.000000")))
+	writer.Write([]byte(currTime.Local().Format(defaultTimeFormat)))
 
 	switch level {
 	case log.LevelCritical:

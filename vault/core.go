@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/armon/go-metrics"
-	log "github.com/mgutz/logxi/v1"
 
 	"google.golang.org/grpc"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/hashicorp/vault/helper/errutil"
 	"github.com/hashicorp/vault/helper/identity"
 	"github.com/hashicorp/vault/helper/jsonutil"
+	log "github.com/hashicorp/vault/helper/logbridge"
 	"github.com/hashicorp/vault/helper/logformat"
 	"github.com/hashicorp/vault/helper/mlock"
 	"github.com/hashicorp/vault/helper/reload"
@@ -468,7 +468,8 @@ func NewCore(conf *CoreConfig) (*Core, error) {
 	}
 
 	// Make a default logger if not provided
-	if conf.Logger == nil {
+	if conf.Logger.LogxiLogger() == nil {
+		// TODO need to replace
 		conf.Logger = logformat.NewVaultLogger(log.LevelTrace)
 	}
 
@@ -525,15 +526,15 @@ func NewCore(conf *CoreConfig) (*Core, error) {
 	}
 	c.seal.SetCore(c)
 
-	c.sealUnwrapper = NewSealUnwrapper(phys, conf.Logger)
+	c.sealUnwrapper = NewSealUnwrapper(phys, conf.Logger.LogxiLogger())
 
 	var ok bool
 
 	// Wrap the physical backend in a cache layer if enabled
 	if txnOK {
-		c.physical = physical.NewTransactionalCache(c.sealUnwrapper, conf.CacheSize, conf.Logger)
+		c.physical = physical.NewTransactionalCache(c.sealUnwrapper, conf.CacheSize, conf.Logger.LogxiLogger())
 	} else {
-		c.physical = physical.NewCache(c.sealUnwrapper, conf.CacheSize, conf.Logger)
+		c.physical = physical.NewCache(c.sealUnwrapper, conf.CacheSize, conf.Logger.LogxiLogger())
 	}
 	c.physicalCache = c.physical.(physical.ToggleablePurgemonster)
 
