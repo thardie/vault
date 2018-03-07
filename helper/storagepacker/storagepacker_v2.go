@@ -95,12 +95,12 @@ func (b *BucketV2) serialize() ([]byte, error) {
 
 // putItemIntoBucket is a recursive function that finds the appropriate bucket
 // to store the item based on the storage space available in the buckets.
-func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) (*BucketV2, *BucketV2, error) {
+func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) error {
 	if bucket == nil {
 		// Compute the index at which the primary bucket should reside
 		primaryIndex, err := s.primaryBucketIndex(item.ID)
 		if err != nil {
-			return nil, nil, err
+			return err
 		}
 
 		// Prepend the index with the prefix
@@ -109,7 +109,7 @@ func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) (*Buck
 		// Check if the primary bucket exists
 		bucket, err = s.GetBucket(primaryKey)
 		if err != nil {
-			return nil, nil, err
+			return err
 		}
 
 		// If the primary bucket does not exist, create one
@@ -120,7 +120,7 @@ func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) (*Buck
 
 	// For sanity
 	if bucket == nil {
-		return nil, nil, fmt.Errorf("bucket is nil")
+		return fmt.Errorf("bucket is nil")
 	}
 
 	// Serializing and deserializing a proto message with empty map translates
@@ -130,9 +130,9 @@ func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) (*Buck
 	}
 
 	// Compute the shard index to which the item belongs
-	shardIndex, err := shardBucketIndex(item.ID, int(bucket.Depth), int(bucket.BucketCount), int(bucket.BucketShardCount))
+	shardIndex, err := shardBucketIndex(item.ID, int(bucket.Depth), int(s.config.BucketCount), int(s.config.BucketShardCount))
 	if err != nil {
-		return nil, nil, errwrap.Wrapf("failed to compute the bucket shard index: {{err}}", err)
+		return errwrap.Wrapf("failed to compute the bucket shard index: {{err}}", err)
 	}
 
 	// Check if the bucket shard to hold the item already exists
@@ -156,7 +156,7 @@ func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) (*Buck
 
 	// For sanity
 	if bucketShard == nil {
-		return nil, nil, fmt.Errorf("bucket shard is nil")
+		return fmt.Errorf("bucket shard is nil")
 	}
 
 	// If the bucket shard is already pushed out, continue the operation in the
@@ -164,12 +164,11 @@ func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) (*Buck
 	if !bucketShard.IsShard {
 		externalBucket, err := s.GetBucket(bucketShard.Key)
 		if err != nil {
-			return nil, nil, err
+			return err
 		}
 		if externalBucket == nil {
-			return nil, nil, fmt.Errorf("failed to read the pushed out bucket shard: %q\n", bucketShard.Key)
+			return fmt.Errorf("failed to read the pushed out bucket shard: %q\n", bucketShard.Key)
 		}
-
 		return s.putItemIntoBucket(externalBucket, item)
 	}
 
@@ -183,12 +182,12 @@ func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) (*Buck
 	// Check if the bucket exceeds the size limit after the addition
 	limitExceeded, err := s.bucketExceedsSizeLimit(bucket)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
 
 	// If the bucket size is within the limit, return the updated bucket
 	if !limitExceeded {
-		return bucket, nil, nil
+		return s.PutBucket(bucket)
 	}
 
 	//
@@ -203,7 +202,7 @@ func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) (*Buck
 	// Clone the bucket and use the clone as the pushed out bucket
 	externalBucket, err := bucketShard.Clone()
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
 
 	// Clear the items in the pushed out bucket shard
@@ -213,21 +212,16 @@ func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) (*Buck
 	// respective bucket shards
 	err = s.splitItemsInBucket(externalBucket)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
 
 	// Insert the item in the bucket that got pushed out
-	parent, _, err := s.putItemIntoBucket(externalBucket, item)
+	err = s.putItemIntoBucket(externalBucket, item)
 	if err != nil {
-		return nil, nil, err
-	}
-	if parent == nil || parent != externalBucket {
-		return nil, nil, fmt.Errorf("failed to insert the item in the pushed out bucket")
+		return err
 	}
 
-	// Return the bucket from which the bucket shard got pushed out and the
-	// bucket that was newly created
-	return bucket, parent, nil
+	return s.PutBucket(bucket)
 }
 
 // Get reads a bucket from the storage
@@ -278,7 +272,16 @@ func (s *StoragePackerV2) PutBucket(bucket *BucketV2) error {
 
 	serializedBucket, err := bucket.serialize()
 	if err != nil {
-		return errwrap.Wrapf("failed to serialize the bucket: {{err}}", err)
+		return err
+	}
+
+	// For testing. Remove later
+	bucketSize, err := s.bucketSize(bucket)
+	if err != nil {
+		return err
+	}
+	if bucketSize > s.config.BucketMaxSize {
+		return fmt.Errorf("bucket %q size of %d exceeding the limit of %d", bucket.Key, bucketSize, s.config.BucketMaxSize)
 	}
 
 	return s.config.View.Put(context.Background(), &logical.StorageEntry{
@@ -306,7 +309,7 @@ func (s *StoragePackerV2) getItemFromBucket(bucket *BucketV2, itemID string) (*I
 		return nil, nil
 	}
 
-	shardIndex, err := shardBucketIndex(itemID, int(bucket.Depth), int(bucket.BucketCount), int(bucket.BucketShardCount))
+	shardIndex, err := shardBucketIndex(itemID, int(bucket.Depth), int(s.config.BucketCount), int(s.config.BucketShardCount))
 	if err != nil {
 		return nil, errwrap.Wrapf("failed to compute the bucket shard index: {{err}}", err)
 	}
@@ -334,32 +337,33 @@ func (s *StoragePackerV2) getItemFromBucket(bucket *BucketV2, itemID string) (*I
 	return bucketShard.Items[itemID], nil
 }
 
-// deleteItemFromBucket
-func (s *StoragePackerV2) deleteItemFromBucket(bucket *BucketV2, itemID string) error {
+// deleteItemFromBucket is a recursive function that finds the bucket holding
+// the item and removes the item from it
+func (s *StoragePackerV2) deleteItemFromBucket(bucket *BucketV2, itemID string) (*BucketV2, error) {
 	if bucket == nil {
 		primaryIndex, err := s.primaryBucketIndex(itemID)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		bucket, err = s.GetBucket(s.config.ViewPrefix + primaryIndex)
 		if err != nil {
-			return errwrap.Wrapf("failed to read packed storage item: {{err}}", err)
+			return nil, errwrap.Wrapf("failed to read packed storage item: {{err}}", err)
 		}
 	}
 
 	if bucket == nil {
-		return nil
+		return nil, nil
 	}
 
-	shardIndex, err := shardBucketIndex(itemID, int(bucket.Depth), int(bucket.BucketCount), int(bucket.BucketShardCount))
+	shardIndex, err := shardBucketIndex(itemID, int(bucket.Depth), int(s.config.BucketCount), int(s.config.BucketShardCount))
 	if err != nil {
-		return errwrap.Wrapf("failed to compute the bucket shard index: {{err}}", err)
+		return nil, errwrap.Wrapf("failed to compute the bucket shard index: {{err}}", err)
 	}
 
 	bucketShard, ok := bucket.Buckets[shardIndex]
 	if !ok {
-		return nil
+		return nil, nil
 	}
 
 	// If the bucket shard is already pushed out, continue the operation in the
@@ -367,11 +371,11 @@ func (s *StoragePackerV2) deleteItemFromBucket(bucket *BucketV2, itemID string) 
 	if !bucketShard.IsShard {
 		externalBucket, err := s.GetBucket(bucketShard.Key)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		if externalBucket == nil {
-			return fmt.Errorf("failed to read external bucket: %q\n", bucketShard.Key)
+			return nil, fmt.Errorf("failed to read external bucket: %q\n", bucketShard.Key)
 		}
 
 		return s.deleteItemFromBucket(externalBucket, itemID)
@@ -379,7 +383,7 @@ func (s *StoragePackerV2) deleteItemFromBucket(bucket *BucketV2, itemID string) 
 
 	delete(bucketShard.Items, itemID)
 
-	return nil
+	return bucket, nil
 }
 
 // GetItem fetches the item using the given item identifier
@@ -401,49 +405,7 @@ func (s *StoragePackerV2) PutItem(item *Item) (string, error) {
 		return "", fmt.Errorf("missing ID in item")
 	}
 
-	parentBucket, childBucket, err := s.putItemIntoBucket(nil, item)
-	if err != nil {
-		return "", errwrap.Wrapf("failed to update entry in packed storage entry: {{err}}", err)
-	}
-
-	// bucketKey is the key of the bucket in which the item finally landed
-	var bucketKey string
-
-	switch {
-	case parentBucket == nil && childBucket == nil:
-		// This shouldn't happen
-		return "", fmt.Errorf("both parent and child buckets nil\n")
-	case parentBucket == nil && childBucket != nil:
-		// This shouldn't happen
-		return "", fmt.Errorf("parent bucket is nil and child bucket is not nil\n")
-	case parentBucket != nil && childBucket == nil:
-		// This happens when the item fits into the parent bucket itself
-		// without the need for any sharding. Persisting the parent bucket is
-		// sufficient
-		err = s.PutBucket(parentBucket)
-		if err != nil {
-			return "", errwrap.Wrapf("failed to persist the parent bucket: {{err}}", err)
-		}
-
-		bucketKey = parentBucket.Key
-	case parentBucket != nil && childBucket != nil:
-		// This happens when the parent bucket couldn't accommodate the new
-		// item and pushes the shard bucket out. Both parent and child bucket
-		// should be persisted.
-		err = s.PutBucket(parentBucket)
-		if err != nil {
-			return "", errwrap.Wrapf("failed to persist the parent bucket: {{err}}", err)
-		}
-
-		err = s.PutBucket(childBucket)
-		if err != nil {
-			return "", errwrap.Wrapf("failed to persist the child bucket: {{err}}", err)
-		}
-
-		bucketKey = childBucket.Key
-	}
-
-	return bucketKey, nil
+	return "", s.putItemIntoBucket(nil, item)
 }
 
 // DeleteItem removes the item using the given item identifier
@@ -451,18 +413,44 @@ func (s *StoragePackerV2) DeleteItem(itemID string) error {
 	if itemID == "" {
 		return fmt.Errorf("empty item ID")
 	}
-	return s.deleteItemFromBucket(nil, itemID)
+
+	bucket, err := s.deleteItemFromBucket(nil, itemID)
+	if err != nil {
+		return err
+	}
+
+	if bucket == nil {
+		return nil
+	}
+
+	return s.PutBucket(bucket)
 }
 
 // bucketExceedsSizeLimit indicates if the given bucket is exceeding the
 // configured size limit on the storage packer
 func (s *StoragePackerV2) bucketExceedsSizeLimit(bucket *BucketV2) (bool, error) {
-	serializedBucket, err := bucket.serialize()
+	bucketSize, err := s.bucketSize(bucket)
 	if err != nil {
 		return false, err
 	}
 
-	return int64(len(serializedBucket)) > s.config.BucketMaxSize, nil
+	// Sharding of buckets begins when the size of the bucket reaches 90% of
+	// the maximum allowed size. Hopefully, this compensates for data structure
+	// adjustment costs and also avoids edge cases with respect to the limit
+	// imposed by the underlying physical backend.
+	max := math.Ceil((float64(s.config.BucketMaxSize) * float64(90)) / float64(100))
+
+	return float64(bucketSize) > max, nil
+}
+
+// bucketSize is the number of bytes in the serialized bucket
+func (s *StoragePackerV2) bucketSize(bucket *BucketV2) (int64, error) {
+	serializedBucket, err := bucket.serialize()
+	if err != nil {
+		return 0, err
+	}
+
+	return int64(len(serializedBucket)), nil
 }
 
 // splitItemsInBucket breaks the list of items in the bucket and divides them
@@ -473,15 +461,18 @@ func (s *StoragePackerV2) splitItemsInBucket(bucket *BucketV2) error {
 	}
 
 	for itemID, item := range bucket.Items {
-		shardIndex, err := shardBucketIndex(itemID, int(bucket.Depth), int(bucket.BucketCount), int(bucket.BucketShardCount))
+		shardIndex, err := shardBucketIndex(itemID, int(bucket.Depth), int(s.config.BucketCount), int(s.config.BucketShardCount))
 		if err != nil {
 			return err
 		}
-		shardKey := bucket.Key + "/" + shardIndex
-		bucketShard := s.newBucket(shardKey, bucket.Depth+1)
+		bucketShard, ok := bucket.Buckets[shardIndex]
+		if !ok {
+			shardKey := bucket.Key + "/" + shardIndex
+			bucketShard = s.newBucket(shardKey, bucket.Depth+1)
+			bucket.Buckets[shardIndex] = bucketShard
+		}
 		bucketShard.IsShard = true
 		bucketShard.Items[itemID] = item
-		bucket.Buckets[shardIndex] = bucketShard
 	}
 
 	bucket.Items = nil
@@ -535,11 +526,10 @@ func bitsNeeded(value int) int {
 // instance
 func (s *StoragePackerV2) newBucket(key string, depth int32) *BucketV2 {
 	bucket := &BucketV2{
-		Key:              key,
-		BucketCount:      int32(s.config.BucketCount),
-		BucketShardCount: int32(s.config.BucketShardCount),
-		Buckets:          make(map[string]*BucketV2),
-		Items:            make(map[string]*Item),
+		Key:     key,
+		Buckets: make(map[string]*BucketV2),
+		Items:   make(map[string]*Item),
+		Depth:   depth,
 	}
 
 	return bucket

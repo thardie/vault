@@ -21,9 +21,8 @@ message BucketV2{
 	map <string, Item> items = 4;
 	// IsShard indicates if the bucket is pushed out of its parent bucket
 	bool IsShard = 5;
-	int32 bucket_count = 6;
-	int32 bucket_shard_count = 7;
-	int32 depth = 8;
+	// Depth indicates the hierarchical positioning of the bucket
+	int32 depth = 6;
 }
 
 // Bucket is the entity that holds the packed items. It can
