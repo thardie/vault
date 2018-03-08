@@ -95,12 +95,12 @@ func (b *BucketV2) serialize() ([]byte, error) {
 
 // putItemIntoBucket is a recursive function that finds the appropriate bucket
 // to store the item based on the storage space available in the buckets.
-func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) error {
+func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) (string, error) {
 	if bucket == nil {
 		// Compute the index at which the primary bucket should reside
 		primaryIndex, err := s.primaryBucketIndex(item.ID)
 		if err != nil {
-			return err
+			return "", err
 		}
 
 		// Prepend the index with the prefix
@@ -109,7 +109,7 @@ func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) error 
 		// Check if the primary bucket exists
 		bucket, err = s.GetBucket(primaryKey)
 		if err != nil {
-			return err
+			return "", err
 		}
 
 		// If the primary bucket does not exist, create one
@@ -120,7 +120,7 @@ func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) error 
 
 	// For sanity
 	if bucket == nil {
-		return fmt.Errorf("bucket is nil")
+		return "", fmt.Errorf("bucket is nil")
 	}
 
 	// Serializing and deserializing a proto message with empty map translates
@@ -132,7 +132,7 @@ func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) error 
 	// Compute the shard index to which the item belongs
 	shardIndex, err := shardBucketIndex(item.ID, int(bucket.Depth), int(s.config.BucketCount), int(s.config.BucketShardCount))
 	if err != nil {
-		return errwrap.Wrapf("failed to compute the bucket shard index: {{err}}", err)
+		return "", errwrap.Wrapf("failed to compute the bucket shard index: {{err}}", err)
 	}
 
 	// Check if the bucket shard to hold the item already exists
@@ -156,7 +156,7 @@ func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) error 
 
 	// For sanity
 	if bucketShard == nil {
-		return fmt.Errorf("bucket shard is nil")
+		return "", fmt.Errorf("bucket shard is nil")
 	}
 
 	// If the bucket shard is already pushed out, continue the operation in the
@@ -164,10 +164,10 @@ func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) error 
 	if !bucketShard.IsShard {
 		externalBucket, err := s.GetBucket(bucketShard.Key)
 		if err != nil {
-			return err
+			return "", err
 		}
 		if externalBucket == nil {
-			return fmt.Errorf("failed to read the pushed out bucket shard: %q\n", bucketShard.Key)
+			return "", fmt.Errorf("failed to read the pushed out bucket shard: %q\n", bucketShard.Key)
 		}
 		return s.putItemIntoBucket(externalBucket, item)
 	}
@@ -182,12 +182,12 @@ func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) error 
 	// Check if the bucket exceeds the size limit after the addition
 	limitExceeded, err := s.bucketExceedsSizeLimit(bucket)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// If the bucket size is within the limit, return the updated bucket
 	if !limitExceeded {
-		return s.PutBucket(bucket)
+		return bucketShard.Key, s.PutBucket(bucket)
 	}
 
 	//
@@ -202,7 +202,7 @@ func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) error 
 	// Clone the bucket and use the clone as the pushed out bucket
 	externalBucket, err := bucketShard.Clone()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Clear the items in the pushed out bucket shard
@@ -212,16 +212,16 @@ func (s *StoragePackerV2) putItemIntoBucket(bucket *BucketV2, item *Item) error 
 	// respective bucket shards
 	err = s.splitItemsInBucket(externalBucket)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Insert the item in the bucket that got pushed out
-	err = s.putItemIntoBucket(externalBucket, item)
+	bucketKey, err := s.putItemIntoBucket(externalBucket, item)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	return s.PutBucket(bucket)
+	return bucketKey, s.PutBucket(bucket)
 }
 
 // Get reads a bucket from the storage
@@ -405,7 +405,7 @@ func (s *StoragePackerV2) PutItem(item *Item) (string, error) {
 		return "", fmt.Errorf("missing ID in item")
 	}
 
-	return "", s.putItemIntoBucket(nil, item)
+	return s.putItemIntoBucket(nil, item)
 }
 
 // DeleteItem removes the item using the given item identifier
