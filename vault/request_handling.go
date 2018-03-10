@@ -660,6 +660,9 @@ func (c *Core) handleRequest(ctx context.Context, req *logical.Request) (retResp
 	// Attach the display name
 	req.DisplayName = auth.DisplayName
 
+	// Attach matched token
+	req.ClientTokenMeta = te.Meta
+
 	// Create an audit trail of the request
 	if !isControlGroupRun(req) {
 		logInput := &audit.LogInput{

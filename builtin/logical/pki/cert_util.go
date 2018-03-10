@@ -325,6 +325,29 @@ func validateNames(data *dataBundle, names []string) string {
 			return name
 		}
 
+		// Checks if requested name is in list of names from auth'd cert, if present
+		if data.role.MustMatchAuthNames {
+			found := false
+			if val, ok := data.req.ClientTokenMeta["common_name"]; ok {
+				if val == name {
+					continue
+				}
+			}
+			if val, ok := data.req.ClientTokenMeta["dns_names"]; ok {
+				splitDns := strings.Split(val, ",")
+				for _, thisName := range splitDns {
+					if thisName == name {
+						found = true
+						break
+					}
+				}
+				if found {
+					continue
+				}
+			}
+			return name
+		}
+
 		// AllowAnyName is checked after this because EnforceHostnames still
 		// applies when allowing any name. Also, we check the sanitized name to
 		// ensure that we are not either checking a full email address or a

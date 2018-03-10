@@ -893,6 +893,10 @@ request is denied.
 
 - `not_before_duration` `(duration: "30s")` – Specifies the duration by which to backdate the NotBefore property.
 
+- `must_match_auth_names` `(bool: false)` -  If set, requested names must
+  already be present in the certificate client used to authenticate. If set,
+  and client did not authenticate with a certificate, then no names will match,
+  and the request will be denied. Defaults to false.
 
 ### Sample Payload
 

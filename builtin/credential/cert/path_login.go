@@ -98,6 +98,7 @@ func (b *backend) pathLogin(ctx context.Context, req *logical.Request, data *fra
 				"serial_number":    clientCerts[0].SerialNumber.String(),
 				"subject_key_id":   certutil.GetHexFormatted(clientCerts[0].SubjectKeyId, ":"),
 				"authority_key_id": certutil.GetHexFormatted(clientCerts[0].AuthorityKeyId, ":"),
+				"dns_names":        strings.Join(clientCerts[0].DNSNames, ","),
 			},
 			LeaseOptions: logical.LeaseOptions{
 				Renewable: true,

@@ -1351,6 +1351,9 @@ IMPROVEMENTS:
    memory utilization [GH-4060]
  * sys/capabilities: Add the ability to use multiple paths for capability
    checking [GH-3663]
+ * secret/pki: Added "must_match_auth_names" which is useful when
+   authenticating with a cert, enforce that a new cert must have names
+   present from auth'd cert
 
 BUG FIXES:
 

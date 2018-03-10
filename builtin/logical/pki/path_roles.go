@@ -316,6 +316,14 @@ for "generate_lease".`,
 				Default:     30,
 				Description: `The duration before now the cert needs to be created / signed.`,
 			},
+			"must_match_auth_names": &framework.FieldSchema{
+				Type:    framework.TypeBool,
+				Default: false,
+				Description: `
+If set, requested names must already be present in the certificate client used
+to authenticate. If set, and client did not authenticate with a certificate,
+then no names will match, and the request will be denied. Defaults to false.`,
+			},
 		},
 
 		Callbacks: map[logical.Operation]framework.OperationFunc{
@@ -520,6 +528,7 @@ func (b *backend) pathRoleCreate(ctx context.Context, req *logical.Request, data
 		GenerateLease:                 new(bool),
 		NoStore:                       data.Get("no_store").(bool),
 		RequireCN:                     data.Get("require_cn").(bool),
+		MustMatchAuthNames:            data.Get("must_match_auth_names").(bool),
 		AllowedSerialNumbers:          data.Get("allowed_serial_numbers").([]string),
 		PolicyIdentifiers:             data.Get("policy_identifiers").([]string),
 		BasicConstraintsValidForNonCA: data.Get("basic_constraints_valid_for_non_ca").(bool),
@@ -709,6 +718,7 @@ type roleEntry struct {
 	NoStore                       bool          `json:"no_store" mapstructure:"no_store"`
 	RequireCN                     bool          `json:"require_cn" mapstructure:"require_cn"`
 	AllowedOtherSANs              []string      `json:"allowed_other_sans" mapstructure:"allowed_other_sans"`
+	MustMatchAuthNames            bool          `json:"must_match_auth_names" mapstructure:"must_match_auth_names"`
 	AllowedSerialNumbers          []string      `json:"allowed_serial_numbers" mapstructure:"allowed_serial_numbers"`
 	AllowedURISANs                []string      `json:"allowed_uri_sans" mapstructure:"allowed_uri_sans"`
 	PolicyIdentifiers             []string      `json:"policy_identifiers" mapstructure:"policy_identifiers"`
@@ -753,6 +763,7 @@ func (r *roleEntry) ToResponseData() map[string]interface{} {
 		"postal_code":                        r.PostalCode,
 		"no_store":                           r.NoStore,
 		"allowed_other_sans":                 r.AllowedOtherSANs,
+		"must_match_auth_names":              r.MustMatchAuthNames,
 		"allowed_serial_numbers":             r.AllowedSerialNumbers,
 		"allowed_uri_sans":                   r.AllowedURISANs,
 		"require_cn":                         r.RequireCN,

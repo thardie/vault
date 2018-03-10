@@ -111,6 +111,10 @@ type Request struct {
 	// logged as part of request audit logging.
 	ClientTokenAccessor string `json:"client_token_accessor" structs:"client_token_accessor" mapstructure:"client_token_accessor" sentinel:""`
 
+	// Stores the TokenEntry Meta matched for this request. Useful for getting
+	// certificate information if the original login was made with a cert.
+	ClientTokenMeta map[string]string `json:"meta" mapstructure:"meta" structs:"meta" sentinel:"meta"`
+
 	// DisplayName is provided to the logical backend to help associate
 	// dynamic secrets with the source entity. This is not a sensitive
 	// name, but is useful for operators.
